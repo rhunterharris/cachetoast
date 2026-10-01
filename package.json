@@ -1,0 +1,17 @@
+{
+  "name": "cachetoast",
+  "version": "0.1.0",
+  "description": "Local, provider-neutral handoffs and cache-aware session rotation for coding agents",
+  "type": "module",
+  "license": "MIT",
+  "author": { "name": "R. Hunter Harris (Hunter Software Consulting)", "url": "https://huntersoftwareconsulting.com" },
+  "homepage": "https://github.com/rhunterharris/cachetoast#readme",
+  "repository": { "type": "git", "url": "git+https://github.com/rhunterharris/cachetoast.git" },
+  "bugs": { "url": "https://github.com/rhunterharris/cachetoast/issues" },
+  "engines": { "node": ">=22" },
+  "bin": { "cachetoast": "bin/cachetoast.mjs" },
+  "exports": { ".": "./lib/policy.mjs" },
+  "files": ["bin", "lib", "docs", "examples", "README.md", "CONTRIBUTING.md", "LICENSE"],
+  "scripts": { "test": "node --test", "check": "node --check bin/cachetoast.mjs && node --test", "demo": "node examples/demo.mjs" },
+  "keywords": ["codex", "claude-code", "prompt-cache", "compaction", "handoff"]
+}
