@@ -12,23 +12,23 @@ After an idle gap longer than the provider's cache lifetime, your next message r
 
 ## Install
 
+From the repo you want to protect:
+
 ```sh
-git clone <this repo> ~/src/cachetoast
-cd /path/to/repo
-node ~/src/cachetoast/bin/cachetoast.mjs init
+npx cachetoast init
 ```
 
-It installs for the agents you have (Claude Code, Codex, Pi) and asks nothing. Add `--dry-run` to preview, or `--provider codex` to pick agents.
+It installs for the agents you have (Claude Code, Codex, Pi) and asks nothing. Add `--dry-run` to preview, or `--provider codex` to pick agents. The runtime is copied into `.cachetoast/runtime`, so hooks never call npm or the network.
 
 Restart your agent. Codex: trust the project and review hooks in `/hooks`. Pi: trust the project.
 
-To update an existing installation, run the command from your current Cachetoast checkout:
+To update an existing installation to the latest release:
 
 ```sh
-node ~/src/cachetoast/bin/cachetoast.mjs update --repo /path/to/repo
+npx cachetoast@latest update
 ```
 
-Add `--dry-run` to preview. Updates keep installed providers, policy, session state, and saved handoffs. They copy this checkout's runtime into the repo; they do not download a new version. `init` adds providers; `update` refreshes existing ones.
+Add `--dry-run` to preview, or `--repo /path/to/repo` to target another repo. Updates keep installed providers, policy, session state, and saved handoffs, and copy the runtime of the version you ran into the repo. `init` adds providers; `update` refreshes existing ones.
 
 ## What it does
 
