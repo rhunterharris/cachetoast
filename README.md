@@ -20,7 +20,7 @@ npx github:rhunterharris/cachetoast init
 
 It installs for the agents you have (Claude Code, Codex, Pi) and asks nothing. Add `--dry-run` to preview, or `--provider codex` to pick agents. The runtime is copied into `.cachetoast/runtime`, so hooks never call npm or the network.
 
-Restart your agent. Codex: trust the project and review hooks in `/hooks`. Pi: trust the project.
+Restart your agent. Codex: trust the project, then run `codex` in a terminal in the repo and approve the hooks in `/hooks`; the Codex app lists unapproved hooks but skips them and cannot approve them ([openai/codex#47283](https://github.com/openai/codex/issues/47283)). Pi: trust the project.
 
 To update an existing installation to the latest version on GitHub:
 

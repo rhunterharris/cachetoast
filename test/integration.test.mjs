@@ -162,7 +162,8 @@ test('the first prompt after the cache goes cold is held once per idle period; s
     hook(root, provider, 'Stop', 0, { last_assistant_message: 'Parser added. Still need tests.', transcript_path });
     const D = deadline * 60_000;
     const out = hook(root, provider, 'UserPromptSubmit', D, { prompt: 'Add unicode support', transcript_path });
-    assert.equal(out.decision, 'block'); assert.equal(out.systemMessage, undefined);
+    assert.equal(out.decision, 'block');
+    if (provider === 'codex') assert.equal(out.systemMessage, out.reason.split('\n\nYour held prompt:')[0]); else assert.equal(out.systemMessage, undefined);
     assert.match(out.reason, /held this prompt/); assert.match(out.reason, /\n\nYour held prompt:\nAdd unicode support$/);
     assert.match(out.reason, new RegExp(`~150k-token session has been idle ${deadline} min with a ${ttl} cache TTL`));
     const key = keyFor(provider, 's1'), handoff = fs.readFileSync(path.join(root, `.cachetoast/handoffs/${key}.md`), 'utf8');
