@@ -10,6 +10,54 @@ Zero dependencies. No LLM calls, API keys, telemetry, or network access. Node.js
 
 After an idle gap longer than the provider's cache lifetime, your next message re-sends the whole context at full input price. On a 200k-token session that is expensive. A fresh session with a short handoff is often cheaper. On a small session it usually isn't, so small sessions are left alone.
 
+## Is this for me?
+
+Paste this into Claude Code, Codex, or Pi on the machine where you code. It reads your local transcripts, changes nothing, and estimates what Cachetoast would have saved you.
+
+```text
+Estimate what Cachetoast (github.com/rhunterharris/cachetoast) would have saved me. Read-only:
+write any script to a temp directory, modify nothing, send nothing over the network, and quote
+no transcript text.
+
+Read my local agent transcripts (JSONL; skip lines that don't parse):
+- Claude Code: ~/.claude/projects/**/*.jsonl. Use `assistant` records with `message.usage`
+  and `timestamp`; skip `isSidechain` records. Count each `message.id` once (one response can
+  span several records).
+- Codex: ~/.codex/sessions/**/*.jsonl and ~/.codex/archived_sessions/**/*.jsonl. Use
+  `event_msg` records whose `payload.type` is `token_count`, reading
+  `payload.info.last_token_usage`.
+- Pi: ~/.pi/agent/sessions/**/*.jsonl. Use assistant messages with `usage` (inspect a file
+  first to confirm field names).
+Skip any agent with no transcripts.
+
+For each session, walk responses in time order. Context = all input tokens (uncached + cache
+reads + cache writes) + output. A response is "cold" when the previous response's context was
+>= 100,000 tokens and the gap since it was >= the idle deadline: 55 min for Claude responses
+whose last cache write was 1h (`usage.cache_creation.ephemeral_1h_input_tokens` > 0), 4 min for
+5m; 25 min for Codex; for Pi, 4 min on Claude models, otherwise 25 min. Cachetoast holds the
+first prompt of each cold gap.
+
+Savings per cold gap = that response's uncached input + cache-write tokens, minus a fresh-start
+cost: the median uncached + cache-write input of the first response of my sessions in the
+same agent (use 25,000 if there are fewer than 5 sessions). Floor at 0. This is an upper bound:
+it assumes I always took the handoff.
+
+Weight tokens to approximate quota: uncached input 1, cache writes 1.25 (2 for 1h writes),
+cache reads 0.1, output 5. Report raw tokens too.
+
+Report for the last 30 days, 90 days, and 6 months, per agent and in total:
+1. Cold gaps caught, and raw tokens saved.
+2. Weighted tokens saved as a share of my weighted usage in that window.
+3. That share as weeks of usage (savings / average weighted usage per week) and as 5-hour
+   usage windows (savings / average weighted usage per 5-hour window that had any activity).
+4. The earliest transcript date per agent. Claude Code deletes transcripts after 30 days unless
+   `cleanupPeriodDays` is raised, so flag any window my data doesn't fully cover.
+
+Finish with one line: whether Cachetoast is worth installing for me, and why.
+```
+
+The estimate is local and approximate: it uses API price ratios as a stand-in for plan quota, which providers don't publish exactly.
+
 ## Install
 
 From the repo you want to protect:
