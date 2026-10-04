@@ -15,17 +15,17 @@ After an idle gap longer than the provider's cache lifetime, your next message r
 From the repo you want to protect:
 
 ```sh
-npx cachetoast init
+npx github:rhunterharris/cachetoast init
 ```
 
 It installs for the agents you have (Claude Code, Codex, Pi) and asks nothing. Add `--dry-run` to preview, or `--provider codex` to pick agents. The runtime is copied into `.cachetoast/runtime`, so hooks never call npm or the network.
 
 Restart your agent. Codex: trust the project and review hooks in `/hooks`. Pi: trust the project.
 
-To update an existing installation to the latest release:
+To update an existing installation to the latest version on GitHub:
 
 ```sh
-npx cachetoast@latest update
+npx github:rhunterharris/cachetoast update
 ```
 
 Add `--dry-run` to preview, or `--repo /path/to/repo` to target another repo. Updates keep installed providers, policy, session state, and saved handoffs, and copy the runtime of the version you ran into the repo. `init` adds providers; `update` refreshes existing ones.
