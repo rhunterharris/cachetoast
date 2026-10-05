@@ -69,7 +69,7 @@ Commit `.cachetoast/runtime`, `.cachetoast/config.json`, and the agent settings,
 
 ## Limits
 
-- Savings come mostly from Claude Code quota: its large contexts are rewritten to cache at 2× the input price after a miss. On one heavy Max user's transcripts, that was ~2–3% of the weekly allowance. Codex and Pi misses cost less.
+- Savings come mostly from Claude Code quota: its large contexts are rewritten to cache at 2× the input price after a miss. Codex and Pi misses cost less.
 - Mobile and remote clients may not show the notice clearly, and can't start a fresh local session to run the handoff. Send the prompt again to continue, or run the handoff later from the CLI or desktop app.
 - Expiry is estimated from a local clock; Cachetoast can't see the provider's cache.
 - No hold if hooks are disabled, untrusted, or time out.
