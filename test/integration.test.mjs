@@ -13,7 +13,7 @@ import { readTranscript } from '../lib/transcript.mjs';
 // Each test gets its own user config so TTLs never leak between tests or from the real home directory.
 test.beforeEach(() => { process.env.XDG_CONFIG_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'cachetoast-user-')); });
 test.afterEach(() => { fs.rmSync(process.env.XDG_CONFIG_HOME, { recursive: true, force: true }); });
-const fixture = t => { const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cachetoast test $ space-')); t.after(() => fs.rmSync(root, { recursive: true, force: true })); return root; };
+const fixture = t => { const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cachetoast test $ space-')); t.after(() => { fs.chmodSync(root, 0o700); fs.rmSync(root, { recursive: true, force: true }); }); return root; };
 const write = (root, file, text) => { fs.mkdirSync(path.dirname(path.join(root, file)), { recursive: true }); fs.writeFileSync(path.join(root, file), text); };
 // Synthetic transcript reporting a context size and model-response time; Claude records also report a cache write's TTL.
 const transcript = (root, provider, tokens, at = 0, text = 'Parser added. Still need tests.', ttl) => {
