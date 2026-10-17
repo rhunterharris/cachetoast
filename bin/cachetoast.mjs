@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
 import path from 'node:path';
-import { handleHook, configAt, ttlChoice, statePath, userConfigPath, KEY_RE, PROVIDERS } from '../lib/runtime.mjs';
+import { handleHook, idleState, recordIdle, configAt, ttlChoice, statePath, userConfigPath, KEY_RE, PROVIDERS } from '../lib/runtime.mjs';
 import { readJson, readText, safePath } from '../lib/storage.mjs';
 
 const HELP = `Cachetoast 0.1.0 — local handoffs, inspired in part by Antiburn
@@ -19,8 +19,10 @@ Usage: cachetoast <command> [--repo PATH] [options]
 Cache TTLs are read from Claude Code sessions, 30m for Codex (GPT-5.6+), and guessed from Pi's model.
 To override (5m, 30m, 1h, 24h), pass --<agent>-cache-ttl: saved per user in ~/.config/cachetoast/config.json,
 or per repo in the gitignored .cachetoast/local.json. A TTL a Claude session reports always wins.
-Only sessions of 100k+ tokens are held: the first prompt after the cache goes cold, once per idle period.
-Hooks and all commands run without LLMs, credentials, or network access.
+Claude Code and Pi attempt idle native compaction at 4m / 25m / 55m for 5m / 30m / 1h TTLs.
+Codex uses the handoff fallback; its hooks cannot portably compact an already-open session.
+Only sessions of 100k+ tokens are held, once per idle period, when compaction did not succeed.
+Hooks and handoffs run locally. Native compaction uses the agent's model and normal billing.
 `;
 function options(args) {
   const result = {};
@@ -65,6 +67,13 @@ async function main() {
   if (argv[0] === '--help' || argv[0] === '-h') { process.stdout.write(HELP); return; }
   const [command = 'help', ...args] = argv, o = options(args);
   if (command === 'help' || o.help) { process.stdout.write(HELP); return; }
+  if (command === 'idle') {
+    const input = JSON.parse(await stdin()), root = findRoot(o.repo ?? process.cwd());
+    const out = input.status ? recordIdle(root, o.provider, input.session_id, input)
+      : idleState(root, o.provider, input.session_id);
+    process.stdout.write(JSON.stringify(out) + '\n');
+    return;
+  }
   if (command === 'hook') {
     // A cost advisory must never stop work because of its own failure: fail open with a visible warning.
     let result;
@@ -82,8 +91,11 @@ async function main() {
     const { install, update, detectProviders } = await import('../lib/install.mjs');
     const updating = command === 'update';
     const root = updating && !o.repo ? findRoot(process.cwd()) : path.resolve(o.repo ?? process.cwd());
-    const providers = o.provider ? o.provider.split(',') : updating ? undefined : detectProviders();
-    if (providers && !providers.length) throw new Error('No Claude Code, Codex, or Pi installation found; pass --provider claude,codex,pi');
+    const unreadable = new Set();
+    const providers = o.provider ? o.provider.split(',') : updating ? undefined : detectProviders(process.env, unreadable);
+    const skipped = unreadable.size ? ` (permission denied checking ${[...unreadable].join(', ')})` : '';
+    if (providers && !providers.length) throw new Error(`No Claude Code, Codex, or Pi installation found${skipped}; pass --provider claude,codex,pi`);
+    if (skipped) console.error(`cachetoast: warning: some agents may not be detected${skipped}; pass --provider to choose them.`);
     if (providers?.some(p => !PROVIDERS.includes(p))) throw new Error(`Choose providers from ${PROVIDERS.join(', ')}`);
     const cacheTtl = Object.fromEntries(PROVIDERS.map(p => [p, o[`${p}-cache-ttl`]]));
     const result = (updating ? update : install)(root, {
@@ -101,8 +113,9 @@ async function main() {
     if (result.userConfig) console.log(`${result.dryRun ? 'Would save' : 'Saved'} cache TTLs to ${result.userConfig}.`);
     if (result.dryRun || !result.changed.length) return;
     const next = ['Restart your agent.'];
+    if (result.providers.includes('claude')) next.push('Claude: launch from the repo root, trust the project, and check /plugin for cachetoast-idle (requires mods support).');
     if (result.providers.includes('codex') || result.providers.includes('pi')) next.push('Trust the repo.');
-    if (result.providers.includes('codex')) next.push('Codex: review /hooks.');
+    if (result.providers.includes('codex')) next.push('Codex: review /hooks. Proactive idle compaction is unavailable, so the handoff is the fallback.');
     console.log(next.join(' '));
     return;
   }
@@ -124,7 +137,7 @@ async function main() {
     const sessions = keys.map(key => {
       try {
         const s = readJson(safePath(root, statePath(key)));
-        return { key, provider: s.provider, ...ttlChoice(config, s.provider, s), heldAt: s.heldAt ?? null, contextTokens: s.contextTokens ?? null, lastActivity: s.lastActivity, warnings: s.warnings ?? [] };
+        return { key, provider: s.provider, ...ttlChoice(config, s.provider, s), heldAt: s.heldAt ?? null, contextTokens: s.contextTokens ?? null, lastActivity: s.lastActivity, compaction: s.compaction ?? null, warnings: s.warnings ?? [] };
       } catch (error) { return { key, error: `Unreadable state (${error.message}); delete it to reset` }; }
     });
     console.log(JSON.stringify({ config, userConfig: userConfigPath(), sessions, note: 'Cache availability is inferred, never guaranteed. Sessions with unknown context size are never held.' }, null, 2));

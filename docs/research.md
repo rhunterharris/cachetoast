@@ -2,6 +2,8 @@
 
 Checked October 1, 2026 against primary provider documentation. Installed clients: Codex CLI 0.159.2 and Claude Code 2.1.285. No paid inference or quota experiment was performed. The private discussion was used to identify questions; its claims were not treated as documentation.
 
+Updated October 17, 2026: Claude's current mods API supports host timers and in-process compaction. The generated plugin passed strict static validation with Claude Code 2.1.292. Timing, cancellation, native API calls, and fallback state are tested with synthetic sessions; no paid live-compaction experiment was performed.
+
 ## What survives cache expiry
 
 Cache expiry removes reusable inference state, not the transcript or its context window. Continuing sends the current context again. Earlier compacted-away history is not magically restored. Native compaction changes the prompt prefix and can require a new cache write. A handoff prepared locally avoids submitting long history solely to summarize it.
@@ -34,11 +36,17 @@ A universal “shorter sessions always perform better” or “250K is optimal�
 
 ## Available hooks
 
-Both current clients expose command hooks, including `UserPromptSubmit`, `Stop`, and compaction events. `UserPromptSubmit` supports blocking before the model processes the prompt. A `systemMessage` only appears after the prompt is sent, when the cost is already paid, so Cachetoast holds the first cold prompt once per idle period (`decision: "block"`) and lets it through when sent again. Codex's CLI adds a submitted prompt to message history before hooks run, so Up-arrow recalls a held prompt. Neither client offers a repo-installable surface visible before typing, so the hold is the only point where the cost can still be avoided. Neither documented lifecycle provides a portable command that requests in-process `/compact` while an arbitrary CLI session is idle. Cachetoast therefore performs deterministic local extraction at the next prompt, leaving live transcripts intact. Because extraction needs no model call, preparing it earlier with a timer would cost the same and only add moving parts.
+Both clients expose command hooks including `UserPromptSubmit`, `Stop`, and compaction events. `UserPromptSubmit` supports blocking before the model processes the prompt. Cachetoast holds the first continuation after the idle deadline once (`decision: "block"`) when native compaction has not succeeded; sending it again proceeds. Codex's CLI adds a submitted prompt to message history before hooks run, so Up-arrow recalls a held prompt. Handoff extraction is deterministic and does not modify provider transcripts.
+
+Claude's newer [mods API](https://code.claude.com/docs/en/plugins/mods/reference) exposes `$.clock.after()` and `$.session.compact()`. The latter uses native semantic compaction between turns, rejects while a turn runs, and returns a skip reason when vetoed. Cachetoast installs a bundled module under `.claude/skills/cachetoast-idle`; [project plugins](https://code.claude.com/docs/en/plugins/loading#plugins-shared-through-a-repository) load after trust, from the primary working directory (desktop worktrees may load the main checkout's plugin). Launch from the repo root. Mods require terminal v2.1.287+ or desktop v2.1.286+ per the [mod creation docs](https://code.claude.com/docs/en/plugins/mods/create). The module uses the host process API to read/write Cachetoast state through its copied Node runtime, without invoking another agent or editing the transcript itself.
+
+Claude and Pi now attempt compaction at TTL minus up to five minutes: 5m → 4m, 30m → 25m, 1h → 55m. New activity cancels the timer. Each idle cycle has at most one attempt; success suppresses the fallback for that cycle. Suspended timers waking at or beyond expiry skip compaction. Native compaction has model cost and cache hits remain uncertain.
+
+Codex's [app-server compaction API](https://learn.chatgpt.com/docs/app-server) exposes `thread/compact/start` to an owning connection. This does not establish a portable repo-hook connection to an arbitrary running CLI or desktop session. Cachetoast keeps Codex's threshold and handoff fallback, and installs no private-socket, UI, or second-process transcript workaround.
 
 Codex loads trusted repo hooks from `.codex/hooks.json`; new or changed hook definitions require review in `/hooks`. Hooks run with the session cwd, which may be a subdirectory. See [Codex hooks](https://learn.chatgpt.com/docs/hooks).
 
-Claude’s `UserPromptSubmit` hooks fail open on timeout or non-zero exit (other than exit 2), and `Stop` does not fire on user interrupt. Cachetoast therefore fails open on its own errors too, and reads response timestamps from the transcript to cover interrupted turns. It uses only `UserPromptSubmit` and `Stop`; native compaction summaries are read from the transcript. See [Claude hooks](https://code.claude.com/docs/en/hooks).
+Claude’s `UserPromptSubmit` hooks fail open on timeout or non-zero exit (other than exit 2), and `Stop` does not fire on user interrupt. Cachetoast fails open on its own errors too, and reads response timestamps from the transcript to cover interrupted turns. Command hooks use `UserPromptSubmit` and `Stop`; the native mod also handles startup, turn start, compaction, and shutdown. See [Claude hooks](https://code.claude.com/docs/en/hooks).
 
 ## Pi
 

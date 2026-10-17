@@ -107,6 +107,26 @@ test('init detects installed agents and asks nothing', t => {
   assert.match(init.stdout, /installed .* \(Claude Code, Codex\)\./); assert.match(init.stdout, /Codex: review \/hooks\./);
   assert.equal(fs.existsSync(path.join(process.env.XDG_CONFIG_HOME, 'cachetoast')), false);
 });
+test('init reports directories it could not search for agents', { skip: process.getuid?.() === 0 && 'root ignores permissions' }, t => {
+  const home = fixture(t), bin = fixture(t), locked = fixture(t);
+  write(bin, 'pi', 'not executable'); fs.chmodSync(locked, 0o000);
+  const unreadable = new Set();
+  assert.deepEqual(detectProviders({ HOME: home, PATH: `${bin}:${locked}` }, unreadable), []);
+  assert.deepEqual([...unreadable], [locked]);
+  const init = spawnSync(process.execPath, [path.resolve('bin/cachetoast.mjs'), 'init'], { cwd: fixture(t), encoding: 'utf8', env: { ...process.env, HOME: home, PATH: locked } });
+  assert.equal(init.status, 1); assert.match(init.stderr, /No Claude Code, Codex, or Pi installation found \(permission denied checking .*\); pass --provider/);
+});
+test('a failed install reports its cause even when rollback also fails', t => {
+  const root = fixture(t), { renameSync, rmSync } = fs;
+  t.after(() => Object.assign(fs, { renameSync, rmSync }));
+  fs.renameSync = (from, to) => { if (to.includes('.cachetoast/runtime/')) throw Object.assign(new Error('EACCES: runtime write'), { code: 'EACCES' }); return renameSync(from, to); };
+  fs.rmSync = (file, options) => { if (file.endsWith('settings.json')) throw new Error('EPERM: rollback rm'); return rmSync(file, options); };
+  assert.throws(() => install(root, { providers: ['claude'] }), /^Error: EACCES: runtime write; rollback also failed, restore these manually: EPERM: rollback rm$/);
+  Object.assign(fs, { renameSync, rmSync });
+  // Everything except the file whose rollback failed was restored.
+  assert.equal(fs.existsSync(path.join(root, '.cachetoast/config.json')), false);
+  assert.equal(fs.existsSync(path.join(root, '.claude/settings.json')), true);
+});
 test('update previews and refreshes installed providers while preserving policy and handoffs', t => {
   const root = fixture(t);
   write(root, '.codex/config.toml', '[shell_environment_policy]\ninherit = "core"\n');

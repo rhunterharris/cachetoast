@@ -1,29 +1,42 @@
 # Cachetoast
 
-When you come back to a **large, idle** coding-agent session whose prompt cache has likely expired, Cachetoast holds your first prompt before the agent re-reads the whole context at full price, and gives you a handoff to continue in a fresh session instead. Works with Claude Code, Codex, and Pi.
+Cachetoast tries to compact **large, idle** Claude Code and Pi sessions before their prompt cache expires. If compaction cannot run, it holds your next prompt once and offers a handoff to a fresh session. Codex uses that handoff fallback.
 
-Zero dependencies. No LLM calls, API keys, telemetry, or network access. Node.js 22+, macOS/Linux.
+Zero dependencies. No separate API keys or telemetry. Timers and handoffs run locally; native compaction uses your agent's model and normal billing. Node.js 22+, macOS/Linux.
 
 Built by [R. Hunter Harris](https://huntersoftwareconsulting.com) at [Hunter Software Consulting](https://huntersoftwareconsulting.com), fractional product and technology leadership for B2B SaaS.
+
+Watch my podcast, [Build & Break Through](https://www.youtube.com/@BuildandBreakThroughPodcast), and subscribe to my newsletter, [Don't SaaS Me](https://hunter-software-consulting.beehiiv.com/).
 
 ## Install
 
 From the repo you want to protect:
 
 ```sh
-npx github:rhunterharris/cachetoast init
+npx cachetoast init
 ```
 
 It installs for the agents you have (`--provider codex` to choose, `--dry-run` to preview). The runtime is copied into `.cachetoast/runtime`, so hooks never call npm or the network. Run `update` instead of `init` to refresh an existing install; it keeps your providers, policy, state, and handoffs.
 
 Then restart your agent.
 
+- **Claude Code:** start from the repo root and trust the project. The repo-local `cachetoast-idle` plugin provides the timer; mods require terminal v2.1.287+ or desktop v2.1.286+. Check `/plugin` for loading errors. Older clients retain the handoff fallback.
 - **Codex:** trust the project, run `codex` in the repo, and approve the hooks in `/hooks`. The Codex app skips unapproved hooks and can't approve them ([openai/codex#47283](https://github.com/openai/codex/issues/47283)).
 - **Pi:** trust the project.
 
 ## How it works
 
-If a session is at least 100k tokens (`--min-context-tokens`) and has been idle past its cache deadline, your next prompt is held once:
+For sessions of at least 100k tokens (`--min-context-tokens`), Claude Code and Pi schedule one native compaction attempt per idle period:
+
+| Cache TTL | Compact after idle | Time before expiry |
+| --- | --- | --- |
+| 5 minutes | 4 minutes | 1 minute |
+| 30 minutes | 25 minutes | 5 minutes |
+| 1 hour | 55 minutes | 5 minutes |
+
+New activity cancels the timer. Successful compaction avoids the handoff for that idle period and does not start another timer. If the agent closes or the computer sleeps past expiry, Cachetoast skips the cold compaction. Resuming while still warm can restore the remaining timer.
+
+If compaction failed, was skipped, or is unavailable, your next prompt after the deadline is held once:
 
 ```text
 Cachetoast held this prompt!
@@ -63,7 +76,7 @@ node .cachetoast/runtime/bin/cachetoast.mjs uninstall           # restore origin
 
 ## What to commit
 
-Commit `.cachetoast/runtime`, `.cachetoast/config.json`, and the agent settings, hooks, and handoff command or skill. `local.json`, `state/`, `handoffs/`, and `manifest.json` are gitignored; handoffs contain conversation excerpts.
+Commit `.cachetoast/runtime`, `.cachetoast/config.json`, and the agent settings, hooks, handoff command or skill, and `.claude/skills/cachetoast-idle` plugin. These use repo-relative paths and need no launchd, cron, or global service. `local.json`, `state/`, `handoffs/`, and `manifest.json` are gitignored; handoffs contain conversation excerpts.
 
 `init` and `update` are idempotent and leave unrelated settings alone. `uninstall` restores the original files and removes local state. Each stops if you've edited the managed files by hand.
 
@@ -72,8 +85,10 @@ Commit `.cachetoast/runtime`, `.cachetoast/config.json`, and the agent settings,
 - Savings come mostly from Claude Code quota: its large contexts are rewritten to cache at 2× the input price after a miss. Codex and Pi misses cost less.
 - Mobile and remote clients may not show the notice clearly, and can't start a fresh local session to run the handoff. Send the prompt again to continue, or run the handoff later from the CLI or desktop app.
 - Expiry is estimated from a local clock; Cachetoast can't see the provider's cache.
+- Timers require the agent to remain running and awake. Starting a compaction before expiry does not guarantee completion or a cache hit. A failed attempt keeps the handoff available.
+- Codex exposes compaction to an owning app-server connection, but its repo hooks cannot portably reach an arbitrary open session. Codex gets the native context ceiling and handoff guard, without a proactive timer.
 - No hold if hooks are disabled, untrusted, or time out.
-- Verified with Claude Code 2.1.285, Codex CLI 0.159.2, and Pi 0.85.1; provider formats can change. Research: [docs/research.md](docs/research.md).
+- Claude plugin statically validated with Claude Code 2.1.292; adapter behavior tested with synthetic sessions. No paid live-compaction experiment was run. Other integration baselines: Codex CLI 0.159.2 and Pi 0.85.1. Research: [docs/research.md](docs/research.md).
 
 ## Develop
 
