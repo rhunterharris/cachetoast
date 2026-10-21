@@ -4,7 +4,7 @@ import path from 'node:path';
 import { handleHook, idleState, recordIdle, configAt, ttlChoice, statePath, userConfigPath, KEY_RE, PROVIDERS } from '../lib/runtime.mjs';
 import { readJson, readText, safePath } from '../lib/storage.mjs';
 
-const HELP = `Cachetoast 0.1.1 — local handoffs, inspired in part by Antiburn
+const HELP = `Cachetoast 0.1.2 — local handoffs, inspired in part by Antiburn
 Usage: cachetoast <command> [--repo PATH] [options]
   init       Install in the current repo (or --repo) for the agents you have installed.
              [--provider claude,codex,pi] [--dry-run]
