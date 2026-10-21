@@ -6,6 +6,7 @@ test('cache TTLs derive idle deadlines and reject invalid policies', () => {
   assert.equal(policy({ cacheTtl: '5m' }).idleMs, 240_000);
   assert.equal(policy({ cacheTtl: '30m' }).idleMs, 1_500_000);
   assert.equal(policy({ cacheTtl: '1h' }).idleMs, 3_300_000);
+  assert.equal(policy({ cacheTtl: '12h' }).idleMs, 42_900_000);
   assert.equal(policy().idleMs, 1_500_000);
   assert.throws(() => policy({ targetTokens: -1 }));
   assert.throws(() => policy({ cacheTtl: 'invented' })); assert.throws(() => policy({ cacheTtl: 'unknown' }));

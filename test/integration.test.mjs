@@ -35,6 +35,7 @@ test('bootstrap merges, is idempotent, preserves earlier limits, and restores or
   install(root); assert.equal(install(root).changed.length, 0);
   const settings = readJson(path.join(root, '.claude/settings.json'));
   assert.equal(settings.env.OTHER, 'yes'); assert.equal(settings.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW, '250000');
+  assert.equal(settings.env.CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS, '100000');
   assert.equal(settings.autoCompactEnabled, true); assert.equal(settings.env.DISABLE_AUTO_COMPACT, '0');
   assert.deepEqual(Object.keys(settings.hooks).sort(), ['Stop', 'UserPromptSubmit']);
   assert.equal(settings.hooks.Stop.length, 2);
@@ -82,6 +83,8 @@ test('TTL overrides are set once per user, shared by repos, and overridable per 
   const c = configAt(root);
   assert.equal(policyFor(c, 'pi').idleMs, 1_500_000);
   assert.equal(policyFor(c, 'claude').targetTokens, 200000); assert.equal(policyFor(c, 'codex').minContextTokens, 50000);
+  // Claude's idle compaction cannot go below 100K, and a lower earlier setting is kept.
+  assert.equal(readJson(path.join(root, '.claude/settings.json')).env.CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS, '100000');
   // Observed beats configured beats guessed.
   assert.deepEqual(ttlChoice(c, 'claude', { observedTtl: '5m' }), { cacheTtl: '5m', ttlSource: 'observed' });
   assert.deepEqual(ttlChoice(c, 'pi', { guessedTtl: '1h' }), { cacheTtl: '30m', ttlSource: 'configured' });
@@ -101,8 +104,9 @@ test('init detects installed agents and asks nothing', t => {
   fs.mkdirSync(path.join(home, '.claude'));
   assert.deepEqual(detectProviders({ HOME: home, PATH: bin }), ['claude', 'codex']);
   assert.deepEqual(detectProviders({ HOME: home, PATH: '' }), ['claude']);
-  const root = fixture(t);
-  const init = spawnSync(process.execPath, [path.resolve('bin/cachetoast.mjs'), 'init'], { cwd: root, encoding: 'utf8', env: { ...process.env, HOME: home, PATH: `${bin}:${path.dirname(process.execPath)}` } });
+  // Node alone, not its install directory: globally installed agents (e.g. pi) live beside it.
+  const root = fixture(t), nodeBin = fixture(t); fs.symlinkSync(process.execPath, path.join(nodeBin, 'node'));
+  const init = spawnSync(process.execPath, [path.resolve('bin/cachetoast.mjs'), 'init'], { cwd: root, encoding: 'utf8', env: { ...process.env, HOME: home, PATH: `${bin}:${nodeBin}` } });
   assert.equal(init.status, 0, init.stderr);
   assert.match(init.stdout, /installed .* \(Claude Code, Codex\)\./); assert.match(init.stdout, /Codex: review \/hooks\./);
   assert.equal(fs.existsSync(path.join(process.env.XDG_CONFIG_HOME, 'cachetoast')), false);
@@ -294,6 +298,18 @@ test('transcripts distinguish per-request context from cumulative traffic and ig
   const a = readTranscript(file, 'claude'); assert.equal(a.contextTokens, 135); assert.equal(a.assistant, 'Need tests'); assert.equal(a.latestUser, 'Fix parser');
   write(root, 'transcript.jsonl', JSON.stringify({ type: 'event_msg', payload: { type: 'token_count', info: { total_token_usage: { total_tokens: 999999 }, last_token_usage: { total_tokens: 1234 } } } }));
   assert.equal(readTranscript(file, 'codex').contextTokens, 1234);
+});
+test('a compaction summary after the latest usage leaves the context unmeasured, so no hold', t => {
+  const root = fixture(t); install(root);
+  const M = 60_000, transcript_path = transcript(root, 'claude', 400_000, 0, 'Done.', '1h');
+  hook(root, 'claude', 'Stop', 0, { transcript_path });
+  // Claude Code's own idle compaction appends a summary at ~54 min; no hook or mod event reports it.
+  fs.appendFileSync(transcript_path, JSON.stringify({ type: 'user', isCompactSummary: true, timestamp: new Date(54 * M).toISOString(), message: { content: 'Summary of parser work' } }) + '\n');
+  assert.equal(readTranscript(transcript_path, 'claude').contextTokens, null);
+  assert.deepEqual(hook(root, 'claude', 'UserPromptSubmit', 120 * M, { prompt: 'Back', transcript_path }), {});
+  // The next response measures the compacted context again.
+  fs.appendFileSync(transcript_path, JSON.stringify({ type: 'assistant', timestamp: new Date(121 * M).toISOString(), message: { content: 'Ok', usage: { input_tokens: 30_000 } } }) + '\n');
+  assert.equal(readTranscript(transcript_path, 'claude').contextTokens, 30_000);
 });
 test('large transcripts are read from the tail only', t => {
   const root = fixture(t), file = path.join(root, 'big.jsonl');

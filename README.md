@@ -36,6 +36,8 @@ For sessions of at least 100k tokens (`--min-context-tokens`), Claude Code and P
 
 New activity cancels the timer. Successful compaction avoids the handoff for that idle period and does not start another timer. If the agent closes or the computer sleeps past expiry, Cachetoast skips the cold compaction. Resuming while still warm can restore the remaining timer.
 
+Claude Code 2.1.299+ has its own [idle compaction](https://code.claude.com/docs/en/settings-reference#idlecompaction): terminal sessions on the 1h TTL, about 54 minutes idle, 200k tokens by default. Cachetoast lowers that minimum to match its own (`CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS`, 100k at least), so Claude usually compacts first and Cachetoast's timer covers what it skips: the 5m TTL, the desktop app and other clients, older versions, and `idleCompaction: false`. Either compaction prevents the hold.
+
 If compaction failed, was skipped, or is unavailable, your next prompt after the deadline is held once:
 
 ```text
@@ -60,11 +62,11 @@ Small sessions are left alone, since a fresh session wouldn't be cheaper. Cachet
 The hold starts at the TTL minus up to 5 minutes (1h → 55 min, 30m → 25 min, 5m → 4 min).
 
 - **Claude Code:** read from the session (1h on Pro/Max; 5m on API keys, cloud providers, or usage credits).
-- **Codex:** 30m (GPT-5.6 and later).
+- **Codex:** 30m (GPT-5.6 and later). OpenAI's API now also offers `12h`, but Codex CLI 0.163 doesn't request it. A Codex lead has said signed-in Codex users keep their cache indefinitely; OpenAI hasn't documented this, so Cachetoast still assumes 30m. If you trust it, raise the TTL with `--codex-cache-ttl 12h` or `24h`.
 - **Pi:** 5m for Claude models (1h with `PI_CACHE_RETENTION=long`), otherwise 30m.
 - **Anything else:** 30m.
 
-To override, run `init --pi-cache-ttl 1h` (or `--codex-cache-ttl`, `--claude-cache-ttl`; `5m`, `30m`, `1h`, `24h`). That saves to `~/.config/cachetoast/config.json`; `.cachetoast/local.json` takes the same format per repo. A TTL reported by a Claude session always wins.
+To override, run `init --pi-cache-ttl 1h` (or `--codex-cache-ttl`, `--claude-cache-ttl`; `5m`, `30m`, `1h`, `12h`, `24h`). That saves to `~/.config/cachetoast/config.json`; `.cachetoast/local.json` takes the same format per repo. A TTL reported by a Claude session always wins.
 
 ## Commands
 
@@ -88,7 +90,7 @@ Commit `.cachetoast/runtime`, `.cachetoast/config.json`, and the agent settings,
 - Timers require the agent to remain running and awake. Starting a compaction before expiry does not guarantee completion or a cache hit. A failed attempt keeps the handoff available.
 - Codex exposes compaction to an owning app-server connection, but its repo hooks cannot portably reach an arbitrary open session. Codex gets the native context ceiling and handoff guard, without a proactive timer.
 - No hold if hooks are disabled, untrusted, or time out.
-- Claude plugin statically validated with Claude Code 2.1.292; adapter behavior tested with synthetic sessions. No paid live-compaction experiment was run. Other integration baselines: Codex CLI 0.159.2 and Pi 0.85.1. Research: [docs/research.md](docs/research.md).
+- Claude plugin statically validated with Claude Code 2.1.292; adapter behavior tested with synthetic sessions. Claude's native idle compaction is read from its transcript summary; no live run confirmed it. No paid live-compaction experiment was run. Other integration baselines: Codex CLI 0.163.0 and Pi 0.85.1. Research: [docs/research.md](docs/research.md).
 
 ## Develop
 

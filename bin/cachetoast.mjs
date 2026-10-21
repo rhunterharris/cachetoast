@@ -17,7 +17,7 @@ Usage: cachetoast <command> [--repo PATH] [options]
   uninstall  Restore installation files if they have no external edits
   hook       --provider claude|codex: JSON lifecycle event on stdin (internal; Pi runs in-process)
 Cache TTLs are read from Claude Code sessions, 30m for Codex (GPT-5.6+), and guessed from Pi's model.
-To override (5m, 30m, 1h, 24h), pass --<agent>-cache-ttl: saved per user in ~/.config/cachetoast/config.json,
+To override (5m, 30m, 1h, 12h, 24h), pass --<agent>-cache-ttl: saved per user in ~/.config/cachetoast/config.json,
 or per repo in the gitignored .cachetoast/local.json. A TTL a Claude session reports always wins.
 Claude Code and Pi attempt idle native compaction at 4m / 25m / 55m for 5m / 30m / 1h TTLs.
 Codex uses the handoff fallback; its hooks cannot portably compact an already-open session.
